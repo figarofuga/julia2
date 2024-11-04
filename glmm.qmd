@@ -1,0 +1,15 @@
+---
+title: "glmm attempt"
+format: html
+---
+
+# Introduction
+
+This is my first attempt to use julia with data prepare and apply glm, glmm, and bayesian analysis.
+
+## Data load
+At first, load data from csv file.
+```{julia}
+using Tidier
+read_csv("pbcseq.csv")
+```
