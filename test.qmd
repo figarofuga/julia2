@@ -115,10 +115,8 @@ TidierData.@select(dat_prep, where(is_string))
 
 # 複数除外
 @chain dat_prep begin
-  DataFramesMeta.@select $(Not(:study_name, :sample_number))
+  DataFramesMeta.@select($(Not(:study_name, :sample_number)))
 end
-
-TidierData.@select(dat_prep, -where(is_number))
 
 ```
 
