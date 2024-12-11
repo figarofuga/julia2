@@ -164,5 +164,26 @@ describe(dat_prep, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max)
 ## Making description table AKA "Table 1"
 
 ```{julia}
+using TableOne
+
+
+descriptive_table = tableone(
+           dat_prep,
+           :island,
+           ["sex", "species", "body_mass", "culmen_length", "culmen_depth", "flipper_length"];
+           binvars = ["sex"],
+           catvars = ["species"],
+           npvars = [ "body_mass", "culmen_length", "culmen_depth", "flipper_length"],
+           digits = 2,
+           pvalues=true,
+           binvardisplay = Dict("sex" => "MALE"),
+           varnames = Dict(
+               "sex" => "Male, %",
+               "species" => "Species, %",
+               "body_mass" => "Body Mass Index, kg/m^2",
+               "culmen_length" => "Culmen length, m"
+           )
+       )
+
 
 ```
