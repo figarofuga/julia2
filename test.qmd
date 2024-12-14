@@ -164,26 +164,50 @@ describe(dat_prep, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max)
 ## Making description table AKA "Table 1"
 
 ```{julia}
+
+dat2 = read_csv("rawdata/pbcseq.csv", missingstring = "NA")
+
+dat_glm = @chain dat2 begin
+    TidierData.@filter((status == 0) || (status == 1))
+    TidierData.@mutate(chol2 = is_float(chol))
+end
+
+describe(dat2, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
+
+```
+```{julia}
 using TableOne
 
-
 descriptive_table = tableone(
-           dat_prep,
-           :island,
-           ["sex", "species", "body_mass", "culmen_length", "culmen_depth", "flipper_length"];
-           binvars = ["sex"],
-           catvars = ["species"],
-           npvars = [ "body_mass", "culmen_length", "culmen_depth", "flipper_length"],
+           dat_glm,
+           :trt,
+           ["age", "sex", "ascites", "hepato", "spiders", "edema", "bili", "chol", "albumin", "platelet", "protime", "stage"];
+           binvars = ["sex", "ascites", "hepato", "spiders"],
+           catvars = ["edema", "stage"],
+           npvars = [ "bili", "chol", "albumin", "platelet", "protime"],
            digits = 2,
            pvalues=true,
-           binvardisplay = Dict("sex" => "MALE"),
+           binvardisplay = Dict("sex" => "m"),
            varnames = Dict(
                "sex" => "Male, %",
-               "species" => "Species, %",
-               "body_mass" => "Body Mass Index, kg/m^2",
-               "culmen_length" => "Culmen length, m"
+               "bili" => "Total bililubin, mg/dL",
+               "albumin" => "Alb, g/dL",
+               "protime" => "PT, sec"
            )
        )
 
+descriptive_table
+
+```
+
+# simple GLM
+
+
+```{julia}
+using DataFrames, GLM, StatsBase
+
+
+lm(@formula(platelet ~ protime), dat_glm)
+gm1 = fit(GeneralizedLinearModel, @formula(status ~ age + sex + trt + ascites + hepato + albumin), dat_glm, Binomial())
 
 ```
