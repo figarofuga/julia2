@@ -211,3 +211,9 @@ lm(@formula(platelet ~ protime), dat_glm)
 gm1 = fit(GeneralizedLinearModel, @formula(status ~ age + sex + trt + ascites + hepato + albumin), dat_glm, Binomial())
 
 ```
+
+# simple survival analysis
+```{julia}
+using Survival
+
+```
