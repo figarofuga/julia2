@@ -169,12 +169,13 @@ dat2 = read_csv("rawdata/pbcseq.csv", missingstring = "NA")
 
 dat_glm = @chain dat2 begin
     TidierData.@filter((status == 0) || (status == 1))
-    TidierData.@mutate(chol2 = is_float(chol))
 end
 
 describe(dat2, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
 
 ```
+
+
 ```{julia}
 using TableOne
 
@@ -208,12 +209,31 @@ using DataFrames, GLM, StatsBase
 
 
 lm(@formula(platelet ~ protime), dat_glm)
-gm1 = fit(GeneralizedLinearModel, @formula(status ~ age + sex + trt + ascites + hepato + albumin), dat_glm, Binomial())
+glm1 = fit(GeneralizedLinearModel, @formula(status ~ age + sex + trt + ascites + hepato + albumin), dat_glm, Binomial())
 
 ```
 
+```{julia}
+using MixedModels
+
+
+glmm1 = fit(MixedModel, @formula(status ~ age + sex + albumin + (1|stage)), dat_glm, Bernoulli())
+
+glmm2 = fit(MixedModel, @formula(body_mass ~ sex + species + (1|island) + (species|island)), dat_prep)
+
+
+```
 # simple survival analysis
+
+
 ```{julia}
 using Survival
+
+dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
+
+cophfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime), dat_glm)
+
+fit(KaplanMeier, dat_glm.event)
+
 
 ```
