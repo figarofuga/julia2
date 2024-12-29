@@ -231,9 +231,15 @@ using Survival
 
 dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
 
-cophfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime), dat_glm)
+coxphfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime), dat_glm)
 
-fit(KaplanMeier, dat_glm.event)
+kmfit = fit(KaplanMeier, dat_glm.event)
+confint(kmfit)
 
+```
+
+
+```{julia}
+using TidierPlots
 
 ```
