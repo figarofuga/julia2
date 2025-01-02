@@ -6,31 +6,36 @@ engine: julia
 
 # 使用package
 
-使用するPackageは基本は`TidierData`です。必要な時にやむを得ず、`DataFrames`や`DataFramesMeta`も使います。
+使用するPackageは基本は`DataFrames`や`DataFramesMeta`にします。`TidierData`は結構よくわからないバグがあるので・・・・・・。
 
 
 ```{julia}
-using Tidier, DataFrames, DataFramesMeta, Chain
+using DataFrames, DataFramesMeta, Chain, CSV
 ```
 
 # Basic data preparation
 ## read data
 
-read_csvを使います。missingstringで何をNAとして読むか決めます。
+
 
 ```{julia}
 
-dat = read_csv("rawdata/penguins_raw.csv", missingstring = ["NA"])
+dat = DataFrame(CSV.File("rawdata/penguins_raw.csv", missingstring = ["NA"]))
 dat_prep = @chain dat begin
-    @clean_names
-    TidierData.@rename(
-        culmen_length = `culmen_length_(mm)`, 
-        culmen_depth = `culmen_depth_(mm)`, 
-        flipper_length = `flipper_length_(mm)`, 
-        body_mass = `body_mass_(g)`
+    @rename(
+      :sample_number = :"Sample Number", 
+      :individual_id = :"Individual ID", 
+      :clutch_completion = :"Clutch Completion", 
+      :culmen_length = :"Culmen Length (mm)", 
+      :culmen_depth = :"Culmen Depth (mm)", 
+      :flipper_length = :"Flipper Length (mm)", 
+      :body_mass = :"Body Mass (g)", 
+      :delta_15_n = :"Delta 15 N (o/oo)", 
+      :delta_13_c = :"Delta 13 C (o/oo)"
+    )  
+    @select(
+      Not(:Region, :Comments)
     )
-    TidierData.@select(-region)
-    TidierData.@select(-comments)
 end
 ```
 
@@ -42,7 +47,7 @@ VSCODEを使っている場合は、Viewerがあるのでそれだけでも良�
 ```{julia}
 # 最初に構造をみる
 first(dat, 5)
-@glimpse(dat)
+describe(dat_prep, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
 
 # 全DataFrameをみるため
 # show(stdout, "text/plain", dat)
@@ -59,17 +64,22 @@ show(stdout, "text/plain", names(dat))
 条件にそって行を選択する方法です。
 ```{julia}
 # 通常の方法
-@filter(dat_prep, sample_number >= 50)
-dat_prep |> (x -> @filter(x, sample_number >= 50))
-@filter(dat_prep, (sample_number >= 30) & (body_mass >=3500))
+@subset(dat_prep, :sample_number .>= 50)
+@rsubset(dat_prep, :sample_number >= 50)
+
+dat_prep |> (x -> @rsubset(x, :sample_number >= 50))
+
+@rsubset(dat_prep, (:sample_number >= 30) & (:body_mass >=3500))
 
 # 文字列
-@filter(dat_prep, sex == "MALE")
-@filter(dat_prep, species in ("Adelie Penguin (Pygoscelis adeliae)","Gentoo penguin (Pygoscelis papua)"))
+@rsubset(dat_prep, :Sex == "MALE")
+@rsubset(dat_prep, :Species in ("Adelie Penguin (Pygoscelis adeliae)","Gentoo penguin (Pygoscelis papua)"))
+
 # 一部の文字列のみ使用
-@filter(dat_prep, str_detect(species, "Adelie | Gentoo"))
+@rsubset(dat_prep, occursin(r"Adelie | Gentoo", :Species))
 # negate
-@filter(dat_prep, !(sex == "MALE"))
+@rsubset(dat_prep, !(:Island == "Torgersen"))
+@rsubset(dat_prep, !((:Island == "Torgersen") | (:Island == "Biscoe")))
 
 # if_all
 
@@ -77,15 +87,20 @@ DataFrames.subset(dat_prep,
     [:sample_number, :culmen_length] => 
     ByRow((x, y) -> all(z -> z <100, skipmissing([x, y]))))
 
+@rsubset(dat_prep, all(z -> z < 100, skipmissing([:sample_number, :culmen_length])))
+
+
 # if_any
 
 DataFrames.subset(dat_prep, 
     [:culmen_depth, :culmen_length] => 
     ByRow((x, y) -> any(z -> z <100, skipmissing([x, y]))))
 
+@rsubset(dat_prep, any(z -> z < 100, skipmissing([:culmen_depth, :culmen_length])))
+
 @chain dat_prep begin
-  DataFrames.filter(row -> any(<(100), skipmissing([row.sample_number, row.culmen_length])), _)
-  DataFrames.filter(row -> all(<(100), skipmissing([row.sample_number, row.culmen_length])), _)
+  @rsubset(any(z -> z < 100, skipmissing([:culmen_depth, :culmen_length])))
+  @rsubset(all(z -> z < 100, skipmissing([:sample_number, :culmen_length])))
 end
 
 ```
@@ -97,6 +112,8 @@ end
 条件にそって列を選ぶ方法です。
 
 ```{julia}
+using TidierData
+
 TidierData.@select(dat_prep, sex, sample_number)
 
 TidierData.@select(dat_prep, starts_with("culmen"))
@@ -105,9 +122,10 @@ TidierData.@select(dat_prep, starts_with("culmen"))
 TidierData.@select(dat_prep, matches("\\([^()]+\\)"))
 
 # 数値
-TidierData.@select(dat_prep, where(is_number))
-# 文字列
-TidierData.@select(dat_prep, where(is_string))
+
+# TidierData.@select(dat_prep, TidierData.where(is_number))
+# # 文字列
+# TidierData.@select(dat_prep, TidierData.where(is_string))
 
 
 # 本当はDocumentで見ると、これが出来るはずだがなぜかできない・・・・・・
@@ -155,7 +173,6 @@ dat_prep[!, [:island, :species]] |>
   (x->unique(x))
 
 @glimpse(dat_prep)
-describe(dat_prep, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
 
 ```
 
@@ -165,7 +182,7 @@ describe(dat_prep, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max)
 
 ```{julia}
 
-dat2 = read_csv("rawdata/pbcseq.csv", missingstring = "NA")
+dat2 = CSV.File("rawdata/pbcseq.csv", missingstring = "NA") |> DataFrame
 
 dat_glm = @chain dat2 begin
     TidierData.@filter((status == 0) || (status == 1))
@@ -236,10 +253,17 @@ coxphfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime)
 kmfit = fit(KaplanMeier, dat_glm.event)
 confint(kmfit)
 
+ourtime = kmfit.events.time
+survival = kmfit.survival
+
+km_dat = DataFrame(times = ourtime, survival = survival)
+
 ```
 
 
 ```{julia}
-using TidierPlots
+using Gadfly
+
+p = plot(km_dat, x=:times, y=:survival, Geom.step)
 
 ```
