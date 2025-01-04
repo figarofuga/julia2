@@ -2,7 +2,7 @@
 
 julia_version = "1.11.2"
 manifest_format = "2.0"
-project_hash = "9c7a3d660f28e9ea3cfb601de6432274ec79e801"
+project_hash = "a05ade5117f1bd11cc501769fbc23a6ea241ba76"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "72af59f5b8f09faee36b4ec48e014a79210f2f4f"
@@ -1710,6 +1710,22 @@ deps = ["MacroTools", "Test"]
 git-tree-sha1 = "75a54abd10709c01f1b86b84ec225d26e840ed58"
 uuid = "e89f7d12-3494-54d1-8411-f7d8b9ae1f27"
 version = "0.5.0"
+
+[[deps.Mice]]
+deps = ["AxisArrays", "CategoricalArrays", "Distributions", "LinearAlgebra", "PrecompileTools", "Printf", "Random", "RecipesBase", "Statistics", "StatsAPI", "StatsBase", "StatsModels", "Tables"]
+git-tree-sha1 = "71e23dc9f66d60f7b74c37110035b3fa57cdae80"
+uuid = "d4678d24-b338-4f96-a2c8-a66549d61c16"
+version = "0.3.5"
+
+    [deps.Mice.extensions]
+    MiceBetaMLExt = "BetaML"
+    MiceDataFramesExt = "DataFrames"
+    MiceRCallExt = "RCall"
+
+    [deps.Mice.weakdeps]
+    BetaML = "024491cd-cc6b-443e-8034-08ea7eb7db2b"
+    DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+    RCall = "6f49c342-dc21-5d91-9882-a32aef131414"
 
 [[deps.MicroCollections]]
 deps = ["Accessors", "BangBang", "InitialValues"]
