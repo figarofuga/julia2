@@ -112,53 +112,63 @@ end
 条件にそって列を選ぶ方法です。
 
 ```{julia}
-using TidierData
 
-TidierData.@select(dat_prep, sex, sample_number)
+@select(dat_prep, :Sex, :sample_number)
 
-TidierData.@select(dat_prep, starts_with("culmen"))
-
-# 正規表現
-TidierData.@select(dat_prep, matches("\\([^()]+\\)"))
-
-# 数値
-
-# TidierData.@select(dat_prep, TidierData.where(is_number))
-# # 文字列
-# TidierData.@select(dat_prep, TidierData.where(is_string))
-
-
-# 本当はDocumentで見ると、これが出来るはずだがなぜかできない・・・・・・
-# TidierData.@select(dat_prep, -(study_name, sample_number))
 
 # 複数除外
 @chain dat_prep begin
-  DataFramesMeta.@select($(Not(:study_name, :sample_number)))
+  @select($(Not(:studyName, :sample_number)))
+end
+
+
+# 正規表現
+@select(dat_prep, Cols(r"^c"))
+@select(dat_prep, Cols(r"_"))
+
+# 数値
+
+@chain dat_prep begin
+  select(_, names(_, Int64))
+end
+
+@chain dat_prep begin
+  select(_, names(_, Union{Missing, Number}))
+end
+
+# 文字列
+@chain dat_prep begin
+  select(_, names(_, InlineString))
 end
 
 ```
 
 ## mutate
 ```{julia}
-@chain dat_prep begin
-  TidierData.@mutate(
-    flipper_in_m = flipper_length / 100) 
-  TidierData.@mutate(flipper_add = flipper_in_m + flipper_length)
-  TidierData.@mutate(across((culmen_length, culmen_depth), (x -> x/100)))
-    end
+tmp = @chain dat_prep begin
+  @transform(
+    :flipper_in_m = :flipper_length / 100) 
+  @transform(
+    :flipper_add = :flipper_in_m + :flipper_length)
+  transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
+  transform(_, names(_, r"(length|depth)") .=> (x -> x .* 100), renamecols = false)
+  end
+
 
 ```
 
 ## Group_by
 
 ```{julia}
+using Statistics
+
 @chain dat_prep begin
-  TidierData.@group_by(island, sex) 
-  TidierData.@summarise(
-    mean_bmi = mean(skipmissing(body_mass)), 
-    median_bmi = median(skipmissing(body_mass)), 
-    number = n()) 
-  TidierData.@ungroup
+  @groupby(:Island, :Sex) 
+  @combine(
+    :mean_bmi = mean(skipmissing(:body_mass)),
+    :median_bmi = median(skipmissing(:body_mass)), 
+    :number = $nrow
+    ) 
     end
 
 ```
@@ -166,13 +176,11 @@ end
 ## others
 
 ```{julia}
-unique(dat_prep[!, :sex])
-dat_prep[!, [:island, :species]] |> unique
+unique(dat_prep[!, :Sex])
+dat_prep[!, [:Island, :Species]] |> unique
 
-dat_prep[!, [:island, :species]] |> 
+dat_prep[!, [:Island, :Species]] |> 
   (x->unique(x))
-
-@glimpse(dat_prep)
 
 ```
 
@@ -185,10 +193,10 @@ dat_prep[!, [:island, :species]] |>
 dat2 = CSV.File("rawdata/pbcseq.csv", missingstring = "NA") |> DataFrame
 
 dat_glm = @chain dat2 begin
-    TidierData.@filter((status == 0) || (status == 1))
+    @rsubset(:status == 0 || :status == 1)
 end
 
-describe(dat2, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
+describe(dat_glm, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
 
 ```
 
@@ -236,7 +244,7 @@ using MixedModels
 
 glmm1 = fit(MixedModel, @formula(status ~ age + sex + albumin + (1|stage)), dat_glm, Bernoulli())
 
-glmm2 = fit(MixedModel, @formula(body_mass ~ sex + species + (1|island) + (species|island)), dat_prep)
+glmm2 = fit(MixedModel, @formula(body_mass ~ Sex + Species + (1|Island) + (Species|Island)), dat_prep)
 
 
 ```
@@ -253,17 +261,29 @@ coxphfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime)
 kmfit = fit(KaplanMeier, dat_glm.event)
 confint(kmfit)
 
-ourtime = kmfit.events.time
-survival = kmfit.survival
+ourtime = [0; kmfit.events.time]
+survival_rate = [1; kmfit.survival]
+n_atrisk = [nrow(dat_glm); kmfit.events.natrisk]
 
-km_dat = DataFrame(times = ourtime, survival = survival)
+km_dat = DataFrame(times = ourtime, survival_rate = survival_rate)
 
 ```
 
 
 ```{julia}
-using Gadfly
+using CairoMakie
 
-p = plot(km_dat, x=:times, y=:survival, Geom.step)
+# f = Figure()
+
+# stairs(f[1, 1], ourtime, survival_rate; step=:post, color=:blue)
+# # stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
+
+f = Figure()
+ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", limits = (0, 5500, 0.85, 1))
+stairs!(ax1, ourtime, survival_rate; step=:post, color=:blue)
+# stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
+
+f
+
 
 ```
