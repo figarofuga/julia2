@@ -145,9 +145,11 @@ end
 
 ## mutate
 ```{julia}
-tmp = @chain dat_prep begin
+@chain dat_prep begin
+# 通常の列追加
   @transform(
     :flipper_in_m = :flipper_length / 100) 
+# 他の列の追加
   @transform(
     :flipper_add = :flipper_in_m + :flipper_length)
   transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
@@ -170,6 +172,22 @@ using Statistics
     :number = $nrow
     ) 
     end
+
+```
+
+## Missing
+```{julia}
+using Statistics
+
+tmp = @chain dat_prep begin
+# single value impute
+  @transform(
+    :new_delta_15 = DataFrames.coalesce.(:delta_15_n, 999)) 
+  @transform @byrow @passmissing :new_culmen_length = 2 * :culmen_length
+  DataFrames.dropmissing(_, [:culmen_length, :Sex])
+  DataFrames.dropmissing(_)
+  end
+
 
 ```
 
