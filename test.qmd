@@ -297,8 +297,14 @@ using CairoMakie
 # # stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
 
 f = Figure()
-ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", limits = (0, 5500, 0.85, 1))
+ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", xticks=collect(0:1000:5500) ,limits = (0, 5500, 0.85, 1))
 stairs!(ax1, ourtime, survival_rate; step=:post, color=:blue)
+ax2 = Axis(f[2, 1], title="Number at risk", xticks=collect(0:1000:5500), xlabel="")
+hidespines!(ax2, :t, :r) # only top and right
+linkxaxes!(ax1, ax2)
+hideydecorations!(ax2)
+text!(ax2, repeat(ourtime, inner=1), ones(Int, length(ourtime)), text=string.(n_atrisk))
+
 # stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
 
 f
