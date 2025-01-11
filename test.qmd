@@ -188,7 +188,7 @@ tmp = @chain dat_prep begin
   DataFrames.dropmissing(_)
   end
 
-
+ 
 ```
 
 ## others
@@ -283,7 +283,28 @@ ourtime = [0; kmfit.events.time]
 survival_rate = [1; kmfit.survival]
 n_atrisk = [nrow(dat_glm); kmfit.events.natrisk]
 
-km_dat = DataFrame(times = ourtime, survival_rate = survival_rate)
+km_dat = DataFrame(
+  ourtimes = ourtime, 
+  survival_rate = survival_rate, 
+  n_atrisk = n_atrisk
+  )
+
+function closest_subset(km_dat, set_times)
+  @chain km_dat begin
+    @rsubset(:ourtimes <= set_times)
+    @orderby(:ourtimes)
+    last(_)
+  end 
+end
+
+set_times = [0, 1000, 2000, 3000, 4000, 5000]
+
+set_rows = []
+for i in set_times
+  push!(set_rows, closest_subset(km_dat, i))
+end
+
+res = DataFrame(set_rows)
 
 ```
 
@@ -303,9 +324,8 @@ ax2 = Axis(f[2, 1], title="Number at risk", xticks=collect(0:1000:5500), xlabel=
 hidespines!(ax2, :t, :r) # only top and right
 linkxaxes!(ax1, ax2)
 hideydecorations!(ax2)
-text!(ax2, repeat(ourtime, inner=1), ones(Int, length(ourtime)), text=string.(n_atrisk))
+text!(ax2, repeat(set_times, inner=1), ones(Int, length(set_times)), text=string.(res[:, :n_atrisk]), align = (:center, :center))
 
-# stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
 
 f
 
