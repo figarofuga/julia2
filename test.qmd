@@ -277,7 +277,10 @@ dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
 coxphfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime), dat_glm)
 
 kmfit = fit(KaplanMeier, dat_glm.event)
-confint(kmfit)
+km_conf =confint(kmfit)
+
+km_conf_df = DataFrame(lower = [x[1] for x in km_conf], higher = [x[2] for x in km_conf]) 
+push!(km_conf_df, (1, 1))
 
 ourtime = [0; kmfit.events.time]
 survival_rate = [1; kmfit.survival]
