@@ -181,8 +181,21 @@ using Statistics
 
 tmp = @chain dat_prep begin
 # single value impute
+  @select(:delta_15_n, :culmen_length, :Sex, :body_mass)
+  end
+
+# transform!(tmp, All() .=> (x -> replace(x, missing => mean(skipmissing(x)))) => identity)
+# mapcols!(tmp) do x
+#            replace(x, missing => mean(skipmissing(x)))
+#        end
+       
+@chain tmp begin
   @transform(
     :new_delta_15 = DataFrames.coalesce.(:delta_15_n, 999)) 
+# impute mean or median value
+  @transform(
+    :mean_delta_15 = DataFrames.coalesce.(:delta_15_n, mean(skipmissing(:delta_15_n)))
+  )
   @transform @byrow @passmissing :new_culmen_length = 2 * :culmen_length
   DataFrames.dropmissing(_, [:culmen_length, :Sex])
   DataFrames.dropmissing(_)
@@ -359,6 +372,12 @@ text!(ax2, repeat(set_times, inner=1), ones(Int, length(set_times)), text=string
 
 
 f
+
+
+```
+
+```{julia}
+
 
 
 ```
