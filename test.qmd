@@ -154,6 +154,9 @@ using Statistics
 # 他の列の追加
   @transform(
     :flipper_add = :flipper_in_m + :flipper_length)
+# if_else
+  # transform(_, :body_mass => (x -> ifelse.(x .<= 3000, 1, 0)) => :obesity)
+# case_when
 # 複数列に同じ操作
   transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
   transform(_, names(_, r"(length|depth)") .=> (x -> x .* 100), renamecols = false)
