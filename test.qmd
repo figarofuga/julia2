@@ -145,6 +145,8 @@ end
 
 ## mutate
 ```{julia}
+using Statistics
+
 @chain dat_prep begin
 # 通常の列追加
   @transform(
@@ -152,8 +154,10 @@ end
 # 他の列の追加
   @transform(
     :flipper_add = :flipper_in_m + :flipper_length)
+# 複数列に同じ操作
   transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
   transform(_, names(_, r"(length|depth)") .=> (x -> x .* 100), renamecols = false)
+  mapcols(c -> eltype(c) <: Union{Missing, Number} ? (c .- mean(skipmissing(c))) ./ std(skipmissing(c)) : c, _)
   end
 
 
@@ -188,6 +192,7 @@ tmp = @chain dat_prep begin
 # mapcols!(tmp) do x
 #            replace(x, missing => mean(skipmissing(x)))
 #        end
+# transform(_, names(_, r"(length|depth)") .=> (x -> x .* 100), renamecols = false)
        
 @chain tmp begin
   @transform(
@@ -330,21 +335,16 @@ res = DataFrame(set_rows)
 ```{julia}
 using CairoMakie
 
-# f = Figure()
-
-# stairs(f[1, 1], ourtime, survival_rate; step=:post, color=:blue)
-# # stairs(f[3, 1], xs, ys; step=:center, color=:red, linestyle=:dot)
-
 f = Figure()
 ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", xticks=collect(0:1000:5500) ,limits = (0, 5500, 0.85, 1))
 stairs!(ax1, ourtime, survival_rate; step=:post, color=:blue)
 band!(ax1, ourtime ,higher, lower ; color = (:blue, 0.2))
-ax2 = Axis(f[2, 1], title="Number at risk", xticks=collect(0:1000:5500), xlabel="")
+ax2 = Axis(f[2, 1], title="Number at risk", titlealign = :left, xticks=collect(0:1000:5500), xlabel="")
 hidespines!(ax2, :t, :r) # only top and right
 linkxaxes!(ax1, ax2)
 hideydecorations!(ax2)
 text!(ax2, repeat(set_times, inner=1), ones(Int, length(set_times)), text=string.(res[:, :n_atrisk]), align = (:center, :center))
-
+rowsize!(f.layout, 2, Relative(1/3))
 
 f
 
@@ -355,44 +355,50 @@ f
 ```{julia}
 using Survival
 
-dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
-
-coxphfit = coxph(@formula(event ~ trt + age + sex + ascites + albumin + protime), dat_glm)
-
-kmfit = fit(KaplanMeier, dat_glm.event)
-km_conf =confint(kmfit)
-
-lower = [1; [x[1] for x in km_conf]]
-higher = [1; [x[2] for x in km_conf]]
-
-ourtime = [0; kmfit.events.time]
-survival_rate = [1; kmfit.survival]
-n_atrisk = [nrow(dat_glm); kmfit.events.natrisk]
-
-km_dat = DataFrame(
-  ourtimes = ourtime, 
-  survival_rate = survival_rate, 
-  n_atrisk = n_atrisk, 
-  lower = lower, 
-  higher = higher
-  )
-
-function closest_subset(km_dat, set_times)
-  @chain km_dat begin
-    @rsubset(:ourtimes <= set_times)
-    @orderby(:ourtimes)
-    last(_)
-  end 
+@chain dat_glm begin
+  groupby(:sex) 
+  combine(_) do sdf
+    sdf.event = EventTime.(sdf.futime, sdf.status .== 1)
+    kmfit = fit(KaplanMeier, sdf.event)
+  end
 end
 
-set_times = [0, 1000, 2000, 3000, 4000, 5000]
+# dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
 
-set_rows = []
-for i in set_times
-  push!(set_rows, closest_subset(km_dat, i))
-end
+# kmfit = fit(KaplanMeier, dat_glm.event)
+# km_conf =confint(kmfit)
 
-res = DataFrame(set_rows)
+# lower = [1; [x[1] for x in km_conf]]
+# higher = [1; [x[2] for x in km_conf]]
+
+# ourtime = [0; kmfit.events.time]
+# survival_rate = [1; kmfit.survival]
+# n_atrisk = [nrow(dat_glm); kmfit.events.natrisk]
+
+# km_dat = DataFrame(
+#   ourtimes = ourtime, 
+#   survival_rate = survival_rate, 
+#   n_atrisk = n_atrisk, 
+#   lower = lower, 
+#   higher = higher
+#   )
+
+# function closest_subset(km_dat, set_times)
+#   @chain km_dat begin
+#     @rsubset(:ourtimes <= set_times)
+#     @orderby(:ourtimes)
+#     last(_)
+#   end 
+# end
+
+# set_times = [0, 1000, 2000, 3000, 4000, 5000]
+
+# set_rows = []
+# for i in set_times
+#   push!(set_rows, closest_subset(km_dat, i))
+# end
+
+# res = DataFrame(set_rows)
 ```
 
 ```{julia}
