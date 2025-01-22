@@ -147,20 +147,37 @@ end
 ```{julia}
 using Statistics
 
-@chain dat_prep begin
+tmp = @chain dat_prep begin
+  @select(:flipper_length, :culmen_length, :culmen_depth, :body_mass)
 # 通常の列追加
-  @transform(
-    :flipper_in_m = :flipper_length / 100) 
-# 他の列の追加
-  @transform(
-    :flipper_add = :flipper_in_m + :flipper_length)
+#   @transform(
+#     :flipper_in_m = :flipper_length / 100) 
+# # 他の列の追加
+#   @transform(
+#     :flipper_add = :flipper_in_m + :flipper_length)
 # if_else
-  # transform(_, :body_mass => (x -> ifelse.(x .<= 3000, 1, 0)) => :obesity)
+  # transform(_, :body_mass => ByRow((x ->
+  #                                   ismissing(x) ? Missing :
+  #                                   x <= 3000 ? "fat" : "thin")) => :obesity)
+  @rtransform(:obesity = ismissing(:body_mass) ? missing : 
+                                  (:body_mass <= 3000 ? "fat" : "thin"))
 # case_when
+  transform(_, [:culmen_length, :culmen_depth] => ByRow((cl, cd) ->
+        # 各行の値は cl, cd
+        # df.culmen_length / df.culmen_depth は列全体
+        ismissing(cl) || ismissing(cd) ? missing :
+        (cl < mean(skipmissing(_.culmen_length)) &&
+         cd < mean(skipmissing(_.culmen_depth))) ? "small" :
+        (cl >= mean(skipmissing(_.culmen_length)) &&
+         cd >= mean(skipmissing(_.culmen_depth))) ? "big" :
+        "medium"
+    ) => :culmen_typ)
 # 複数列に同じ操作
   transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
+# 正規表現でのacross
   transform(_, names(_, r"(length|depth)") .=> (x -> x .* 100), renamecols = false)
-  mapcols(c -> eltype(c) <: Union{Missing, Number} ? (c .- mean(skipmissing(c))) ./ std(skipmissing(c)) : c, _)
+# 型Typeでのacross
+  # mapcols(c -> eltype(c) <: Union{Missing, Number} ? (c .- mean(skipmissing(c))) ./ std(skipmissing(c)) : c, _)
   end
 
 
