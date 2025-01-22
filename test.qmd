@@ -156,9 +156,9 @@ tmp = @chain dat_prep begin
 #   @transform(
 #     :flipper_add = :flipper_in_m + :flipper_length)
 # if_else
-  # transform(_, :body_mass => ByRow((x ->
-  #                                   ismissing(x) ? Missing :
-  #                                   x <= 3000 ? "fat" : "thin")) => :obesity)
+  transform(_, :body_mass => ByRow((x ->
+                                    ismissing(x) ? Missing :
+                                    x <= 3000 ? "fat" : "thin")) => :obesity)
   @rtransform(:obesity = ismissing(:body_mass) ? missing : 
                                   (:body_mass <= 3000 ? "fat" : "thin"))
 # case_when
@@ -375,7 +375,7 @@ f
 ```{julia}
 using Survival
 
-@chain dat_glm begin
+gkm = @chain dat_glm begin
   groupby(:sex) 
   combine(_) do sdf
     sdf.event = EventTime.(sdf.futime, sdf.status .== 1)
