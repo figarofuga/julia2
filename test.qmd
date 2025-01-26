@@ -172,6 +172,23 @@ tmp = @chain dat_prep begin
          cd >= mean(skipmissing(_.culmen_depth))) ? "big" :
         "medium"
     ) => :culmen_typ)
+  transform(
+    _,
+    [:culmen_length, :culmen_depth] => ((cl_vec, cd_vec) -> begin
+        # cl_vec, cd_vecは列全体(ベクトル)
+        # ここで列平均を計算（事前に変数を作らず、そのまま呼ぶ）
+        m_cl = mean(skipmissing(cl_vec))
+        m_cd = mean(skipmissing(cd_vec))
+
+        # mapを使って各行の値(cl, cd)に対して処理する
+        map((cl, cd) ->
+            ismissing(cl) || ismissing(cd) ? missing :
+            (cl < m_cl && cd < m_cd)       ? "small" :
+            (cl >= m_cl && cd >= m_cd)     ? "big"   :
+                                             "medium"
+        , cl_vec, cd_vec)
+    end) => :culmen_typ
+)
 # 複数列に同じ操作
   transform(_, [:culmen_length, :culmen_depth] .=> (x -> x/100) .=> [:culmen_length_m, :culmen_depth_m])
 # 正規表現でのacross
@@ -375,18 +392,36 @@ f
 ```{julia}
 using Survival
 
+
 gkm = @chain dat_glm begin
   groupby(:sex) 
   combine(_) do sdf
     sdf.event = EventTime.(sdf.futime, sdf.status .== 1)
     kmfit = fit(KaplanMeier, sdf.event)
+    return (kmfit=kmfit,)
   end
 end
 
-# dat_glm.event = EventTime.(dat_glm.futime, dat_glm.status .== 1)
+# Kaplan-Meier推定結果を展開
+expanded_dfs = []
 
-# kmfit = fit(KaplanMeier, dat_glm.event)
-# km_conf =confint(kmfit)
+for row in eachrow(gkm)
+    km = row.kmfit
+    kmconf = confint(km)
+    
+    # 新しい DataFrame を作成
+    df = DataFrame(
+        sex = row.sex,
+        time = vcat(0, km.events.time),  # 0 を先頭に追加
+        survival = vcat(1.0, km.survival),  # 1.0 を先頭に追加
+        lower = [1; [x[1] for x in kmconf]],
+        higher = [1; [x[2] for x in kmconf]]
+    )
+    push!(expanded_dfs, df)
+end
+
+# すべての結果を結合
+df2 = vcat(expanded_dfs...)
 
 # lower = [1; [x[1] for x in km_conf]]
 # higher = [1; [x[2] for x in km_conf]]
