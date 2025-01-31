@@ -147,14 +147,18 @@ end
 ```{julia}
 using Statistics
 
+@chain dat_prep begin
+# 通常の列追加
+  @transform(
+    :flipper_in_m = :flipper_length / 100) 
+# 他の列の追加
+  @transform(
+    :flipper_add = :flipper_in_m + :flipper_length)
+end
+
+
 tmp = @chain dat_prep begin
   @select(:flipper_length, :culmen_length, :culmen_depth, :body_mass)
-# 通常の列追加
-#   @transform(
-#     :flipper_in_m = :flipper_length / 100) 
-# # 他の列の追加
-#   @transform(
-#     :flipper_add = :flipper_in_m + :flipper_length)
 # if_else
   transform(_, :body_mass => ByRow((x ->
                                     ismissing(x) ? Missing :
@@ -412,7 +416,7 @@ for row in eachrow(gkm)
     # 新しい DataFrame を作成
     df = DataFrame(
         sex = row.sex,
-        time = vcat(0, km.events.time),  # 0 を先頭に追加
+        survtime = vcat(0, km.events.time),  # 0 を先頭に追加
         survival = vcat(1.0, km.survival),  # 1.0 を先頭に追加
         lower = [1; [x[1] for x in kmconf]],
         higher = [1; [x[2] for x in kmconf]]
@@ -423,38 +427,38 @@ end
 # すべての結果を結合
 df2 = vcat(expanded_dfs...)
 
-# lower = [1; [x[1] for x in km_conf]]
-# higher = [1; [x[2] for x in km_conf]]
+using DataFrames, Chain
 
-# ourtime = [0; kmfit.events.time]
-# survival_rate = [1; kmfit.survival]
-# n_atrisk = [nrow(dat_glm); kmfit.events.natrisk]
+function closest_subset(km_dat, set_times, group_var)
+  @chain km_dat begin
+    groupby(group_var)
+    combine(_) do sdf
+      sdf = sdf[sdf.survtime .<= set_times, :]
+      sdf = sort(sdf, :survtime)
+      sdf[end, :]  # 各グループの最大 `survtime` を取得
+    end
+  end
+end
 
-# km_dat = DataFrame(
-#   ourtimes = ourtime, 
-#   survival_rate = survival_rate, 
-#   n_atrisk = n_atrisk, 
-#   lower = lower, 
-#   higher = higher
-#   )
 
-# function closest_subset(km_dat, set_times)
-#   @chain km_dat begin
-#     @rsubset(:ourtimes <= set_times)
-#     @orderby(:ourtimes)
-#     last(_)
-#   end 
-# end
+set_times = [0, 1000, 2000, 3000, 4000, 5000]
 
-# set_times = [0, 1000, 2000, 3000, 4000, 5000]
+set_rows = []
+for i in set_times
+    df_subset = closest_subset(df2, i, :sex)  # 各 `i` に対するデータフレームを取得
+    df_subset[!, :set_time] .= i  # set_time 列を追加して、どの閾値で取得したかを示す
+    push!(set_rows, df_subset)  # DataFrame のリストに追加
+end
 
-# set_rows = []
-# for i in set_times
-#   push!(set_rows, closest_subset(km_dat, i))
-# end
+# DataFrame を結合
+res = vcat(set_rows..., cols=:union)
 
-# res = DataFrame(set_rows)
+
+
+
 ```
+
+
 
 ```{julia}
 
