@@ -460,7 +460,7 @@ res = vcat(set_rows..., cols=:union)
 
 
 
-```{julia}
+ ```{julia}
 
 # make two 
 using CairoMakie
@@ -470,8 +470,13 @@ f = Figure()
 ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", xticks=collect(0:1000:5500) ,limits = (0, 5500, 0.5, 1))
 stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :survival]; step=:post, color = :blue)
 stairs!(ax1, expanded_dfs[2][!, :survtime], expanded_dfs[2][!, :survival]; step=:post, color = :red)
+
+stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :lower]; step=:post, color = (:blue, 0.2))
+stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :higher]; step=:post, color = (:blue, 0.2))
+
 band!(ax1, expanded_dfs[1][!, :survtime] , expanded_dfs[1][!, :higher], expanded_dfs[1][!, :lower]; color = (:blue, 0.2))
-band!(ax1, expanded_dfs[2][!, :survtime] , expanded_dfs[2][!, :higher], expanded_dfs[2][!, :lower]; color = (:red, 0.2))
+
+# band!(ax1, expanded_dfs[2][!, :survtime] , expanded_dfs[2][!, :higher], expanded_dfs[2][!, :lower]; color = (:red, 0.2))
 ax2 = Axis(f[2, 1], title="Number at risk", titlealign = :left, xticks=collect(0:1000:5500), xlabel="")
 hidespines!(ax2, :t, :r) # only top and right
 linkxaxes!(ax1, ax2)
