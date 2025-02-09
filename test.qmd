@@ -453,8 +453,47 @@ end
 # DataFrame を結合
 res = vcat(set_rows..., cols=:union)
 
+using DataFrames
 
+"""
+    stepify(df::DataFrame; xcol::Symbol=:x, ycol::Symbol=:y)
 
+`df` から x, y データを取得し、ステッププロットに適した形に加工した新たな `DataFrame` を返す。
+- `xcol`, `ycol` で列名を指定（デフォルトでは `:x`, `:y`）
+- 返される DataFrame は、ステップ状に補完された (x, y) の座標リストとなる
+"""
+function stepify(df::DataFrame; xcol::Symbol=:x, ycol::Symbol=:y)
+    # x でソート（既にソート済みなら不要）
+    df_sorted = sort(df, xcol)
+    xvals = collect(df_sorted[!, xcol])
+    yvals = collect(df_sorted[!, ycol])
+    
+    # 補完後の点列用の配列を用意
+    newx = Float64[]
+    newy = Float64[]
+    
+    # 最初の点をプッシュ
+    push!(newx, xvals[1])
+    push!(newy, yvals[1])
+    
+    # 階段状に補完
+    for i in 1:(length(xvals)-1)
+        # 区間 [xᵢ, xᵢ₊₁) の横方向のステップ
+        push!(newx, xvals[i+1])
+        push!(newy, yvals[i])   # y は変化しない(横線)
+        
+        # xᵢ₊₁ の位置で縦方向に y が変化
+        push!(newx, xvals[i+1])
+        push!(newy, yvals[i+1]) # y を次の値に
+    end
+    
+    # 結果を DataFrame にして返す
+    return DataFrame(x=newx, y=newy)
+end
+
+stepify(res, xcol = :survtime, ycol = :lower)
+
+stepify(res, xcol = :survtime, ycol = :higher)
 
 ```
 
