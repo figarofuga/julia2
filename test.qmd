@@ -402,7 +402,7 @@ gkm = @chain dat_glm begin
   combine(_) do sdf
     sdf.event = EventTime.(sdf.futime, sdf.status .== 1)
     kmfit = fit(KaplanMeier, sdf.event)
-    return (kmfit=kmfit,)
+    return (kmfit=kmfit, subdata = sdf)
   end
 end
 
@@ -416,6 +416,7 @@ for row in eachrow(gkm)
     # 新しい DataFrame を作成
     df = DataFrame(
         sex = row.sex,
+        natrisk = vcat(nrow(row.subdata), km.events.natrisk),
         survtime = vcat(0, km.events.time),  # 0 を先頭に追加
         survival = vcat(1.0, km.survival),  # 1.0 を先頭に追加
         lower = [1; [x[1] for x in kmconf]],
@@ -453,47 +454,60 @@ end
 # DataFrame を結合
 res = vcat(set_rows..., cols=:union)
 
+
 using DataFrames
 
 """
-    stepify(df::DataFrame; xcol::Symbol=:x, ycol::Symbol=:y)
+    stepify(df::DataFrame)
 
-`df` から x, y データを取得し、ステッププロットに適した形に加工した新たな `DataFrame` を返す。
-- `xcol`, `ycol` で列名を指定（デフォルトでは `:x`, `:y`）
-- 返される DataFrame は、ステップ状に補完された (x, y) の座標リストとなる
+`df` から `:survtime` を x 軸、`:survival`, `:lower`, `:higher` を y 軸として
+ステッププロットに適した形に加工した新たな `DataFrame` を返す。
+
+- `:survtime` を x 軸として扱う
+- `:survival`, `:lower`, `:higher` の 3 列を y 軸としてステップ補完
 """
-function stepify(df::DataFrame; xcol::Symbol=:x, ycol::Symbol=:y)
+function stepify(df::DataFrame)
+    # x, y の列を定義
+    xcol = :survtime
+    ycols = [:survival, :lower, :higher]
+
     # x でソート（既にソート済みなら不要）
     df_sorted = sort(df, xcol)
     xvals = collect(df_sorted[!, xcol])
-    yvals = collect(df_sorted[!, ycol])
-    
-    # 補完後の点列用の配列を用意
+    yvals = [collect(df_sorted[!, col]) for col in ycols]
+
+    # 結果用の配列
     newx = Float64[]
-    newy = Float64[]
-    
+    newy = [Float64[] for _ in ycols]
+
     # 最初の点をプッシュ
     push!(newx, xvals[1])
-    push!(newy, yvals[1])
-    
+    for (i, y) in enumerate(ycols)
+        push!(newy[i], yvals[i][1])
+    end
+
     # 階段状に補完
     for i in 1:(length(xvals)-1)
-        # 区間 [xᵢ, xᵢ₊₁) の横方向のステップ
         push!(newx, xvals[i+1])
-        push!(newy, yvals[i])   # y は変化しない(横線)
-        
-        # xᵢ₊₁ の位置で縦方向に y が変化
+        for (j, y) in enumerate(ycols)
+            push!(newy[j], yvals[j][i])   # y は変化しない(横線)
+        end
+
         push!(newx, xvals[i+1])
-        push!(newy, yvals[i+1]) # y を次の値に
+        for (j, y) in enumerate(ycols)
+            push!(newy[j], yvals[j][i+1]) # y を次の値に
+        end
     end
-    
-    # 結果を DataFrame にして返す
-    return DataFrame(x=newx, y=newy)
+
+    # DataFrame にして返す
+    return DataFrame(survtime=newx, survival=newy[1], lower=newy[2], higher=newy[3])
 end
 
-stepify(res, xcol = :survtime, ycol = :lower)
 
-stepify(res, xcol = :survtime, ycol = :higher)
+
+newstepify(expanded_dfs[1])
+
+newstepify(expanded_dfs[2])
 
 ```
 
@@ -507,13 +521,12 @@ using CairoMakie
 
 f = Figure()
 ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", xticks=collect(0:1000:5500) ,limits = (0, 5500, 0.5, 1))
-stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :survival]; step=:post, color = :blue)
-stairs!(ax1, expanded_dfs[2][!, :survtime], expanded_dfs[2][!, :survival]; step=:post, color = :red)
+lines!(ax1, stepify(expanded_dfs[1])[!, :survtime], stepify(expanded_dfs[1])[!, :survival];  color = :blue)
+lines!(ax1, stepify(expanded_dfs[2])[!, :survtime], stepify(expanded_dfs[2])[!, :survival];  color = :red)
 
-stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :lower]; step=:post, color = (:blue, 0.2))
-stairs!(ax1, expanded_dfs[1][!, :survtime], expanded_dfs[1][!, :higher]; step=:post, color = (:blue, 0.2))
+band!(ax1, stepify(expanded_dfs[1])[!, :survtime], stepify(expanded_dfs[1])[!, :higher], stepify(expanded_dfs[1])[!, :lower]; color = (:blue, 0.2))
 
-band!(ax1, expanded_dfs[1][!, :survtime] , expanded_dfs[1][!, :higher], expanded_dfs[1][!, :lower]; color = (:blue, 0.2))
+band!(ax1, stepify(expanded_dfs[2])[!, :survtime], stepify(expanded_dfs[2])[!, :higher], stepify(expanded_dfs[2])[!, :lower]; color = (:red, 0.2))
 
 # band!(ax1, expanded_dfs[2][!, :survtime] , expanded_dfs[2][!, :higher], expanded_dfs[2][!, :lower]; color = (:red, 0.2))
 ax2 = Axis(f[2, 1], title="Number at risk", titlealign = :left, xticks=collect(0:1000:5500), xlabel="")
