@@ -223,6 +223,7 @@ using Statistics
 ## Missing
 ```{julia}
 using Statistics
+using Mice
 
 tmp = @chain dat_prep begin
 # single value impute
@@ -539,3 +540,4 @@ hideydecorations!(ax2)
 f
 
 ```
+
