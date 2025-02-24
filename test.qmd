@@ -222,8 +222,8 @@ using Statistics
 
 ## Missing
 ```{julia}
-using Statistics
-using Mice
+
+using Statistics, GLM, Mice, Random
 
 tmp = @chain dat_prep begin
 # single value impute
@@ -248,7 +248,14 @@ tmp = @chain dat_prep begin
   DataFrames.dropmissing(_)
   end
 
- 
+describe(tmp, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
+
+Random.seed!(42); # Set random seed for reproducibility
+mout = Mice.mice(tmp, m = 5)
+
+analysesLMs = with(mout, data -> lm(@formula(body_mass ~ Sex + culmen_length), data))
+
+resultsLMs = pool(analysesLMs)
 ```
 
 ## others
