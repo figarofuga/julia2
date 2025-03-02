@@ -513,9 +513,9 @@ end
 
 
 
-newstepify(expanded_dfs[1])
+stepify(expanded_dfs[1])
 
-newstepify(expanded_dfs[2])
+stepify(expanded_dfs[2])
 
 ```
 
@@ -536,15 +536,51 @@ band!(ax1, stepify(expanded_dfs[1])[!, :survtime], stepify(expanded_dfs[1])[!, :
 
 band!(ax1, stepify(expanded_dfs[2])[!, :survtime], stepify(expanded_dfs[2])[!, :higher], stepify(expanded_dfs[2])[!, :lower]; color = (:red, 0.2))
 
-# band!(ax1, expanded_dfs[2][!, :survtime] , expanded_dfs[2][!, :higher], expanded_dfs[2][!, :lower]; color = (:red, 0.2))
 ax2 = Axis(f[2, 1], title="Number at risk", titlealign = :left, xticks=collect(0:1000:5500), xlabel="")
 hidespines!(ax2, :t, :r) # only top and right
 linkxaxes!(ax1, ax2)
 hideydecorations!(ax2)
-# text!(ax2, repeat(set_times, inner=2), ones(Int, length(set_times)), text=string.(res[:, :n_atrisk]), align = (:center, :center))
-# rowsize!(f.layout, 2, Relative(1/3))
+
+text!(ax2, repeat(set_times, inner=2), repeat(1:2, outer = length(set_times)), text=string.(res[:, :natrisk]), align = (:center, :center))
+rowsize!(f.layout, 2, Relative(1/3))
 
 f
 
 ```
 
+```{julia}
+using CairoMakie
+
+f = Figure(padding=(30, 30, 30, 30))  # 全体のパディングを増やす
+ax1 = Axis(f[1, 1], title="Kaplan-Meier Curve", xlabel="Time", ylabel="Survival Rate", 
+           xticks=collect(0:1000:5500), limits=(0, 5500, 0.5, 1))
+lines!(ax1, stepify(expanded_dfs[1])[!, :survtime], stepify(expanded_dfs[1])[!, :survival]; color=:blue)
+lines!(ax1, stepify(expanded_dfs[2])[!, :survtime], stepify(expanded_dfs[2])[!, :survival]; color=:red)
+
+band!(ax1, stepify(expanded_dfs[1])[!, :survtime], stepify(expanded_dfs[1])[!, :higher], stepify(expanded_dfs[1])[!, :lower]; color=(:blue, 0.2))
+band!(ax1, stepify(expanded_dfs[2])[!, :survtime], stepify(expanded_dfs[2])[!, :higher], stepify(expanded_dfs[2])[!, :lower]; color=(:red, 0.2))
+
+# Number at risk のパネル設定を調整
+ax2 = Axis(f[2, 1], title="Number at risk", titlealign=:left, xticks=collect(0:1000:5500),xlabel="",
+           height=60, # 高さを固定して余白を作る
+           yticklabelpad=10, # Y軸ラベルのパディング
+           yticks = [1.3, 1.7],
+           ytickformat=values -> [value == 1.3 ? "m" : value == 1.7 ? "f" : "" for value in values],
+           limits = (nothing, nothing, 1, 2)
+           ) 
+
+hidespines!(ax2, :t, :r) # 上のスパインを非表示
+linkxaxes!(ax1, ax2)
+# hideydecorations!(ax2)
+
+# テキストの位置を調整（Y座標を1.5と1.8に変更）
+text!(ax2, repeat(set_times, inner=2), repeat([1.3, 1.7], outer=length(set_times)), 
+      text=string.(res[:, :natrisk]), align=(:center, :center))
+
+# パネル間の余白を設定
+rowgap!(f.layout, 15) # パネル間に15ピクセルの間隔を追加
+rowsize!(f.layout, 2, Relative(1/4)) # Number at riskパネルの相対サイズを調整
+
+f
+
+```
