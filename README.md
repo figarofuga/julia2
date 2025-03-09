@@ -77,7 +77,7 @@ Pkg.add(
 Pkg.add([
     "QuartoNotebookRunner", "RDatasets", "CategoricalArrays", "Chain", 
     "CSV", "DataFrames", "DataFramesMeta", "TableOne", "Distributions", "GLM", 
-    "StatsBase", "StatsPlots", "MixedModels", "Survival", "CairoMakie", "Gadfly"
+    "StatsBase", "StatsPlots", "MixedModels", "Survival", "CairoMakie", "Gadfly", "Colors"
 ])
 ```
 
