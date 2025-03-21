@@ -16,6 +16,18 @@ using DataFrames, DataFramesMeta, Chain, CSV
 # Basic data preparation
 ## read data
 
+```{julia}
+using CSV, DataFrames, DataFramesMeta
+
+dat2 = CSV.File("rawdata/pbcseq.csv", missingstring = "NA") |> DataFrame
+
+dat_glm = @chain dat2 begin
+    @rsubset(:status == 0 || :status == 1)
+end
+
+describe(dat_glm, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
+
+```
 
 
 ```{julia}
@@ -272,18 +284,6 @@ dat_prep[!, [:Island, :Species]] |>
 # Basic analysis
 
 ## Making description table AKA "Table 1"
-
-```{julia}
-
-dat2 = CSV.File("rawdata/pbcseq.csv", missingstring = "NA") |> DataFrame
-
-dat_glm = @chain dat2 begin
-    @rsubset(:status == 0 || :status == 1)
-end
-
-describe(dat_glm, :eltype, :nuniqueall, :nmissing,  :min, :mean, :median, :max) |> (x -> show(x, allrows = true))
-
-```
 
 
 ```{julia}
@@ -544,6 +544,7 @@ f
 ```
 
 ```{julia}
+using Survival, CairoMakie, Colors
 
 """
     plot_km_curve_with_risk_table(data, group_var, time_var, status_var; 
@@ -784,4 +785,249 @@ km_plot = plot_km_curve_with_risk_table(
 # 表示または保存
 km_plot
 # save("km_curve.png", km_plot)
+```
+
+
+```{julia}
+using Survival, CairoMakie, Colors
+
+
+"""
+    plot_km_curve_with_risk_table(data, group_var, time_var, status_var; 
+                                  set_times=nothing, 
+                                  colors=nothing, 
+                                  title="Kaplan-Meier Curve", 
+                                  xlabel="Time", 
+                                  ylabel="Survival Rate",
+                                  xticks=nothing,
+                                  xlimits=nothing,
+                                  ylimits=(0.5, 1.0),
+                                  xpadding=0.05)
+
+Kaplan-Meier生存曲線と、その下にNumber at riskテーブルを描画する関数。
+
+引数:
+- `data`: 解析対象のDataFrame
+- `group_var`: グループ変数のシンボル (例: :sex)
+- `time_var`: 時間変数のシンボル (例: :futime)
+- `status_var`: 状態変数のシンボル (例: :status)
+- `set_times`: Number at riskを表示する時間点の配列 (デフォルト: 自動的に設定)
+- `colors`: 各グループの色を指定するベクター (デフォルト: 自動的に設定)
+- `title`: グラフのタイトル (デフォルト: "Kaplan-Meier Curve")
+- `xlabel`: X軸のラベル (デフォルト: "Time")
+- `ylabel`: Y軸のラベル (デフォルト: "Survival Rate")
+- `xticks`: X軸の目盛り (デフォルト: 自動的に設定)
+- `xlimits`: X軸の表示範囲 (デフォルト: 自動的に設定)
+- `ylimits`: Y軸の表示範囲 (デフォルト: (0.5, 1.0))
+- `xpadding`: X軸左側のパディング量（範囲に対する割合） (デフォルト: 0.05)
+
+戻り値:
+- Makieの図オブジェクト
+"""
+function plot_km_curve_with_risk_table(data, group_var, time_var, status_var; 
+                                      set_times=nothing, 
+                                      colors=nothing, 
+                                      title="Kaplan-Meier Curve", 
+                                      xlabel="Time", 
+                                      ylabel="Survival Rate",
+                                      xticks=nothing,
+                                      xlimits=nothing,
+                                      ylimits=(0.5, 1.0),
+                                      xpadding=0.05)
+    
+    # グループごとにKM推定を行う
+    gkm = @chain data begin
+        groupby(group_var) 
+        combine(_) do sdf
+            sdf.event = EventTime.(sdf[!, time_var], sdf[!, status_var] .== 1)
+            kmfit = fit(KaplanMeier, sdf.event)
+            return (kmfit=kmfit, subdata=sdf)
+        end
+    end
+    
+    # Kaplan-Meier推定結果を展開
+    expanded_dfs = []
+    
+    for row in eachrow(gkm)
+        km = row.kmfit
+        kmconf = confint(km)
+        
+        # 新しい DataFrame を作成
+        df = DataFrame(
+            group = row[group_var],
+            natrisk = vcat(nrow(row.subdata), km.events.natrisk),
+            survtime = vcat(0, km.events.time),  # 0 を先頭に追加
+            survival = vcat(1.0, km.survival),  # 1.0 を先頭に追加
+            lower = [1; [x[1] for x in kmconf]],
+            higher = [1; [x[2] for x in kmconf]]
+        )
+        push!(expanded_dfs, df)
+    end
+    
+    # すべての結果を結合
+    df2 = vcat(expanded_dfs...)
+    
+    # デフォルトのset_timesを設定
+    if isnothing(set_times)
+        max_time = maximum(df2.survtime)
+        step_size = max_time / 5
+        set_times = collect(0:step_size:max_time)
+    end
+    
+    # X軸の目盛り設定
+    if isnothing(xticks)
+        xticks = collect(0:set_times[end]/5:set_times[end])
+    end
+    
+    # X軸の範囲設定（左側にパディングを追加）
+    max_x = isnothing(xlimits) ? set_times[end] * 1.05 : xlimits[2]
+    min_x = isnothing(xlimits) ? -max_x * xpadding : xlimits[1] - (xlimits[2] - xlimits[1]) * xpadding
+    xlimits = (min_x, max_x)
+    
+    # 各時点でのリスク数を取得
+    function closest_subset(km_dat, time_point, group_col)
+        @chain km_dat begin
+            groupby(group_col)
+            combine(_) do sdf
+                sdf = sdf[sdf.survtime .<= time_point, :]
+                sdf = sort(sdf, :survtime)
+                sdf[end, :]  # 各グループの最大 `survtime` を取得
+            end
+        end
+    end
+    
+    set_rows = []
+    for t in set_times
+        df_subset = closest_subset(df2, t, :group)  # 各時点に対するデータフレームを取得
+        df_subset[!, :set_time] .= t  # set_time 列を追加して、どの閾値で取得したかを示す
+        push!(set_rows, df_subset)  # DataFrame のリストに追加
+    end
+    
+    # DataFrame を結合
+    res = vcat(set_rows..., cols=:union)
+    
+    # ステップ関数用の補間
+    function stepify(df::DataFrame)
+        # x, y の列を定義
+        xcol = :survtime
+        ycols = [:survival, :lower, :higher]
+        
+        # x でソート（既にソート済みなら不要）
+        df_sorted = sort(df, xcol)
+        xvals = collect(df_sorted[!, xcol])
+        yvals = [collect(df_sorted[!, col]) for col in ycols]
+        
+        # 結果用の配列
+        newx = Float64[]
+        newy = [Float64[] for _ in ycols]
+        
+        # 最初の点をプッシュ
+        push!(newx, xvals[1])
+        for (i, y) in enumerate(ycols)
+            push!(newy[i], yvals[i][1])
+        end
+        
+        # 階段状に補完
+        for i in 1:(length(xvals)-1)
+            push!(newx, xvals[i+1])
+            for (j, y) in enumerate(ycols)
+                push!(newy[j], yvals[j][i])   # y は変化しない(横線)
+            end
+            
+            push!(newx, xvals[i+1])
+            for (j, y) in enumerate(ycols)
+                push!(newy[j], yvals[j][i+1]) # y を次の値に
+            end
+        end
+        
+        # DataFrame にして返す
+        return DataFrame(survtime=newx, survival=newy[1], lower=newy[2], higher=newy[3])
+    end
+    
+    g_levels = length(expanded_dfs)
+    
+    f = Figure(padding=(30, 30, 30, 30))
+    ax1 = Axis(f[1, 1], title=title, xlabel=xlabel, ylabel=ylabel, 
+               xticks=xticks, limits=(xlimits[1], xlimits[2], ylimits[1], ylimits[2]))
+    
+    # デフォルトの色設定
+    if isnothing(colors)
+        # 手動で対照的な色を設定
+        distinct_colors = [RGB(0.0, 0.0, 0.8),   # 濃い青
+                           RGB(0.8, 0.0, 0.0)]   # 濃い赤
+        
+        # グループ数が2つより多い場合は、対照的な色のリストを拡張
+        if g_levels > 2
+            # HSV色空間で均等に分布した色を生成
+            distinct_colors = [HSV(360.0 * (i-1) / g_levels, 0.85, 0.85) for i in 1:g_levels]
+        end
+    else
+        distinct_colors = colors
+    end
+    
+    # グループ名を取得（凡例用）
+    group_names = [df.group[1] for df in expanded_dfs]
+    
+    # 曲線を描画
+    for i in 1:g_levels
+        color_i = distinct_colors[i]
+        # 透明度を持つ同じ色を作成
+        color_i_alpha = RGBAf(color_i.r, color_i.g, color_i.b, 0.2)
+        
+        lines!(ax1, stepify(expanded_dfs[i])[!, :survtime], stepify(expanded_dfs[i])[!, :survival]; 
+               color=color_i, linewidth=2.5, label=string(group_names[i]))
+        band!(ax1, stepify(expanded_dfs[i])[!, :survtime], stepify(expanded_dfs[i])[!, :higher], 
+              stepify(expanded_dfs[i])[!, :lower]; color=color_i_alpha)
+    end
+    
+    # 凡例を追加
+    Legend(f[1, 2], ax1)
+    
+    # Number at risk のパネル設定を調整
+    ax2 = Axis(f[2, 1], title="Number at risk", titlealign=:left, xticks=xticks, xlabel="",
+               height=60, # 高さを固定して余白を作る
+               yticklabelpad=10, # Y軸ラベルのパディング
+               yticks = [i/(g_levels+1) for i in 1:g_levels],
+               ytickformat=values -> [value == i/(g_levels+1) ? string(group_names[i]) : "" for (i, value) in enumerate(values)],
+               limits = (xlimits[1], xlimits[2], 0, 1)
+               ) 
+    
+    hidespines!(ax2, :t, :r) # 上と右のスパインを非表示
+    linkxaxes!(ax1, ax2)
+    
+    # テキストの位置を調整
+    for i in 1:g_levels
+        y_pos = i/(g_levels+1)
+        for (j, t) in enumerate(set_times)
+            subset = res[(res.set_time .== t) .& (res.group .== group_names[i]), :]
+            if !isempty(subset)
+                text!(ax2, t, y_pos, text=string(subset.natrisk[1]), align=(:center, :center))
+            end
+        end
+    end
+    
+    # パネル間の余白を設定
+    rowgap!(f.layout, 15) 
+    rowsize!(f.layout, 2, Relative(1/4))
+    
+    return f
+end
+
+```
+
+
+```{julia}
+# データを準備して関数を呼び出す
+km_plot = plot_km_curve_with_risk_table(
+    dat_glm,          # データフレーム
+    :sex,             # グループ変数
+    :futime,          # 時間変数
+    :status,          # 状態変数
+    set_times=[0, 1000, 2000, 3000, 4000, 5000], # リスク表示時間
+    title="Survival by Sex",
+    xlabel="Time (days)",
+    ylabel="Survival Probability",
+    ylimits=(0.5, 1.0),
+    xpadding=0.05,    # X軸左側のパディング量
+)
 ```
